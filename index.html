@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Football Tactics Board</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#2d5a1b" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; touch-action: none; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #fff;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── TOP BAR ── */
+    #topbar {
+      background: #16213e;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      border-bottom: 2px solid #0f3460;
+      flex-wrap: wrap;
+    }
+    #topbar h1 { font-size: 13px; font-weight: 700; color: #e94560; flex: 1; white-space: nowrap; }
+    #topbar select, #topbar button {
+      font-size: 12px;
+      padding: 5px 8px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+    }
+    #topbar select { background: #0f3460; color: #fff; }
+    #topbar button { background: #e94560; color: #fff; font-weight: 600; }
+    #topbar button.secondary { background: #0f3460; }
+
+    /* colour swatch buttons */
+    .color-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 50% !important;
+      border: 2px solid rgba(255,255,255,0.4) !important;
+      padding: 0 !important;
+      cursor: pointer;
+      flex-shrink: 0;
+      position: relative;
+      overflow: hidden;
+    }
+    .color-btn input[type=color] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+      border: none;
+      padding: 0;
+    }
+    .color-label {
+      font-size: 9px;
+      color: #aaa;
+      white-space: nowrap;
+      line-height: 1;
+    }
+    .color-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    /* ── PITCH WRAPPER ── */
+    #pitch-wrapper {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+    }
+
+    /* ── PITCH ── */
+    #pitch {
+      position: relative;
+      width: 100%;
+      background: #2d7a1b;
+      overflow: hidden;
+    }
+    #pitch::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(0,0,0,0.07) 0px, rgba(0,0,0,0.07) 40px,
+        transparent 40px, transparent 80px
+      );
+      pointer-events: none;
+    }
+
+    #pitch-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    /* ── PLAYER TOKEN ── */
+    .player {
+      position: absolute;
+      width: 36px;
+      height: 44px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      cursor: grab;
+      user-select: none;
+      transform: translate(-50%, -100%);
+      z-index: 10;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.6));
+    }
+    .player:active { cursor: grabbing; z-index: 100; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.8)); }
+
+    .player svg.figure {
+      width: 28px;
+      height: 34px;
+      flex-shrink: 0;
+    }
+
+    .player .plabel {
+      font-size: 8px;
+      font-weight: 700;
+      color: #fff;
+      text-shadow: 0 1px 3px rgba(0,0,0,1);
+      white-space: nowrap;
+      line-height: 1;
+      margin-top: 1px;
+      background: rgba(0,0,0,0.45);
+      border-radius: 3px;
+      padding: 1px 3px;
+      max-width: 44px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* Ball */
+    .player.ball-icon {
+      width: 26px;
+      height: 26px;
+      transform: translate(-50%, -50%);
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+    }
+    .player.ball-icon svg { width: 26px; height: 26px; }
+
+    /* ── BENCH ── */
+    #bench {
+      background: #16213e;
+      border-top: 2px solid #0f3460;
+      padding: 5px 10px 6px;
+      flex-shrink: 0;
+      min-height: 64px;
+    }
+    #bench h3 { font-size: 10px; color: #aaa; margin-bottom: 4px; }
+    #bench-players {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      align-items: flex-end;
+    }
+    .bench-player {
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1px;
+    }
+    .bench-player svg { filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5)); }
+    .bench-player span {
+      font-size: 8px;
+      color: #ccc;
+      white-space: nowrap;
+      max-width: 40px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ── MODAL ── */
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    #modal-overlay.open { display: flex; }
+    #modal {
+      background: #16213e;
+      border-radius: 14px;
+      padding: 20px;
+      width: 90%;
+      max-width: 400px;
+      max-height: 82vh;
+      overflow-y: auto;
+      border: 1px solid #0f3460;
+    }
+    #modal h2 { font-size: 16px; margin-bottom: 14px; color: #e94560; }
+    .modal-section { margin-bottom: 14px; }
+    .modal-section label { font-size: 12px; color: #aaa; display: block; margin-bottom: 4px; }
+    .player-input-row {
+      display: flex; gap: 6px; margin-bottom: 6px; align-items: center;
+    }
+    .player-input-row input[type=text] {
+      flex: 1; padding: 7px 10px; border-radius: 8px;
+      border: 1px solid #0f3460; background: #0f3460;
+      color: #fff; font-size: 13px;
+    }
+    .player-input-row input[type=text]::placeholder { color: #888; }
+    .remove-btn {
+      background: #e94560; border: none; color: #fff;
+      border-radius: 6px; width: 28px; height: 28px;
+      font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .add-row-btn {
+      background: #0f3460; color: #fff; border: 1px dashed #aaa;
+      border-radius: 8px; padding: 7px; width: 100%;
+      cursor: pointer; font-size: 12px; margin-top: 4px;
+    }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .modal-actions button {
+      flex: 1; padding: 10px; border-radius: 8px; border: none;
+      font-size: 14px; font-weight: 700; cursor: pointer;
+    }
+    #apply-btn  { background: #e94560; color: #fff; }
+    #cancel-btn { background: #0f3460; color: #fff; }
+
+    #bench-players::-webkit-scrollbar { height: 4px; }
+    #bench-players::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <h1>⚽ Tactics</h1>
+
+  <select id="format-select">
+    <option value="5">5-a-side</option>
+    <option value="7">7-a-side</option>
+    <option value="9">9-a-side</option>
+    <option value="11" selected>11-a-side</option>
+  </select>
+
+  <!-- My team colour -->
+  <div class="color-group">
+    <button class="color-btn" id="my-color-btn" title="My team colour">
+      <input type="color" id="my-color-picker" value="#f9ca24" />
+    </button>
+    <span class="color-label">My team</span>
+  </div>
+
+  <!-- Opp team colour -->
+  <div class="color-group">
+    <button class="color-btn" id="opp-color-btn" title="Opposition colour">
+      <input type="color" id="opp-color-picker" value="#e74c3c" />
+    </button>
+    <span class="color-label">Opposition</span>
+  </div>
+
+  <button id="setup-btn">👥 Setup</button>
+  <button class="secondary" id="reset-btn">↺</button>
+</div>
+
+<!-- PITCH -->
+<div id="pitch-wrapper">
+  <div id="pitch">
+    <svg id="pitch-svg" viewBox="0 0 100 160" preserveAspectRatio="none">
+      <rect x="5" y="4" width="90" height="152" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+      <line x1="5" y1="80" x2="95" y2="80" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+      <circle cx="50" cy="80" r="12" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+      <circle cx="50" cy="80" r="0.8" fill="rgba(255,255,255,0.7)"/>
+      <rect x="22" y="4" width="56" height="22" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+      <rect x="35" y="4" width="30" height="9" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+      <rect x="40" y="2" width="20" height="4" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="1"/>
+      <circle cx="50" cy="20" r="0.8" fill="rgba(255,255,255,0.7)"/>
+      <path d="M 38 26 A 12 12 0 0 1 62 26" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+      <rect x="22" y="134" width="56" height="22" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+      <rect x="35" y="147" width="30" height="9" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+      <rect x="40" y="154" width="20" height="4" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="1"/>
+      <circle cx="50" cy="140" r="0.8" fill="rgba(255,255,255,0.7)"/>
+      <path d="M 38 134 A 12 12 0 0 0 62 134" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+      <path d="M 5 8 A 4 4 0 0 1 9 4" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+      <path d="M 91 4 A 4 4 0 0 1 95 8" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+      <path d="M 5 152 A 4 4 0 0 0 9 156" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+      <path d="M 91 156 A 4 4 0 0 0 95 152" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="0.8"/>
+    </svg>
+  </div>
+</div>
+
+<!-- BENCH -->
+<div id="bench">
+  <h3>🪑 BENCH</h3>
+  <div id="bench-players"></div>
+</div>
+
+<!-- MODAL -->
+<div id="modal-overlay">
+  <div id="modal">
+    <h2>👥 Team Setup</h2>
+    <div class="modal-section">
+      <label>My Team Players (first player = GK)</label>
+      <div id="my-players-list"></div>
+      <button class="add-row-btn" id="add-player-btn">+ Add Player</button>
+    </div>
+    <div class="modal-section">
+      <label>Substitutes / Bench</label>
+      <div id="bench-list"></div>
+      <button class="add-row-btn" id="add-bench-btn">+ Add Sub</button>
+    </div>
+    <div class="modal-actions">
+      <button id="cancel-btn">Cancel</button>
+      <button id="apply-btn">✅ Apply</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────
+// COLOURS
+// ─────────────────────────────────────────
+let myColor  = '#f9ca24';
+let oppColor = '#e74c3c';
+let myGkColor  = '#00b894';
+let oppGkColor = '#0984e3';
+
+const myPicker  = document.getElementById('my-color-picker');
+const oppPicker = document.getElementById('opp-color-picker');
+const myBtn     = document.getElementById('my-color-btn');
+const oppBtn    = document.getElementById('opp-color-btn');
+
+function syncColorBtn(btn, color) {
+  btn.style.background = color;
+}
+
+myPicker.addEventListener('input', e => {
+  myColor = e.target.value;
+  // derive GK as darker shade
+  myGkColor = shadeColor(myColor, -30);
+  syncColorBtn(myBtn, myColor);
+  renderPitch();
+});
+oppPicker.addEventListener('input', e => {
+  oppColor = e.target.value;
+  oppGkColor = shadeColor(oppColor, -30);
+  syncColorBtn(oppBtn, oppColor);
+  renderPitch();
+});
+
+// Init button colours
+syncColorBtn(myBtn, myColor);
+syncColorBtn(oppBtn, oppColor);
+
+function shadeColor(hex, pct) {
+  const num = parseInt(hex.replace('#',''), 16);
+  const r = Math.min(255, Math.max(0, (num >> 16) + pct));
+  const g = Math.min(255, Math.max(0, ((num >> 8) & 0xff) + pct));
+  const b = Math.min(255, Math.max(0, (num & 0xff) + pct));
+  return `#${((1<<24)|(r<<16)|(g<<8)|b).toString(16).slice(1)}`;
+}
+
+// ─────────────────────────────────────────
+// SVG HUMAN FIGURE
+// ─────────────────────────────────────────
+// Returns an SVG string for a human figure filled with `color`
+// label shown below head
+function humanSVG(color, label, size = 28) {
+  // Proportional figure: head, torso, arms, legs
+  // ViewBox 0 0 20 30
+  const s = size;
+  return `
+    <svg class="figure" viewBox="0 0 20 30" width="${s}" height="${s * 1.5}"
+         xmlns="[w3.org](http://www.w3.org/2000/svg)">
+      <!-- head -->
+      <circle cx="10" cy="4" r="3.2" fill="${color}" stroke="rgba(0,0,0,0.35)" stroke-width="0.5"/>
+      <!-- body -->
+      <path d="M7 8 Q5 10 5.5 15 L7.5 15 L8 12 L10 13 L12 12 L12.5 15 L14.5 15 Q15 10 13 8 Z"
+            fill="${color}" stroke="rgba(0,0,0,0.35)" stroke-width="0.4"/>
+      <!-- left leg -->
+      <path d="M8 15 L7 22 L9 22 L10 17 Z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="0.4"/>
+      <!-- right leg -->
+      <path d="M12 15 L13 22 L11 22 L10 17 Z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="0.4"/>
+      <!-- left arm -->
+      <path d="M7 8.5 L4.5 13 L6 13.5 L8 9.5 Z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="0.4"/>
+      <!-- right arm -->
+      <path d="M13 8.5 L15.5 13 L14 13.5 L12 9.5 Z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="0.4"/>
+      <!-- label inside body area (shirt number/initials) -->
+      <text x="10" y="12.5" text-anchor="middle" font-size="3.8" font-weight="bold"
+            fill="rgba(0,0,0,0.7)" font-family="sans-serif">${label}</text>
+    </svg>`;
+}
+
+function ballSVG() {
+  return `
+    <svg viewBox="0 0 26 26" width="26" height="26" xmlns="[w3.org](http://www.w3.org/2000/svg)">
+      <circle cx="13" cy="13" r="12" fill="#fff" stroke="#333" stroke-width="1"/>
+      <polygon points="13,5 16,9 13,13 10,9" fill="#333"/>
+      <polygon points="13,13 16,9 21,10 20,15" fill="#333"/>
+      <polygon points="13,13 10,9 5,10 6,15" fill="#333"/>
+      <polygon points="13,13 6,15 8,20 13,21" fill="#333"/>
+      <polygon points="13,13 20,15 18,20 13,21" fill="#333"/>
+    </svg>`;
+}
+
+// ─────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────
+let format       = 11;
+let myPlayers    = [];
+let oppPlayers   = [];
+let benchPlayers = [];
+let ballPos      = { x: 50, y: 50 };
+let playerEls    = [];
+let ballEl       = null;
+
+const pitch    = document.getElementById('pitch');
+const benchDiv = document.getElementById('bench-players');
+
+const defaultFormations = {
+  5:  {
+    my:  [[50,10],[25,32],[75,32],[35,52],[65,52]],
+    opp: [[50,90],[25,68],[75,68],[35,48],[65,48]]
+  },
+  7:  {
+    my:  [[50,7],[22,26],[50,24],[78,26],[28,46],[50,44],[72,46]],
+    opp: [[50,93],[22,74],[50,76],[78,74],[28,54],[50,56],[72,54]]
+  },
+  9:  {
+    my:  [[50,7],[18,24],[50,20],[82,24],[25,40],[50,37],[75,40],[33,54],[67,54]],
+    opp: [[50,93],[18,76],[50,80],[82,76],[25,60],[50,63],[75,60],[33,46],[67,46]]
+  },
+  11: {
+    my:  [[50,5],[18,18],[36,16],[64,16],[82,18],[24,34],[50,30],[76,34],[30,48],[50,45],[70,48]],
+    opp: [[50,95],[18,82],[36,84],[64,84],[82,82],[24,66],[50,70],[76,66],[30,52],[50,55],[70,52]]
+  }
+};
+
+// ─────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────
+function init() {
+  format = parseInt(document.getElementById('format-select').value);
+  const f = defaultFormations[format];
+
+  if (myPlayers.length === 0) {
+    myPlayers = f.my.map((pos, i) => ({ name: `P${i+1}`, x: pos[0], y: pos[1] }));
+  } else {
+    while (myPlayers.length < format) {
+      const i = myPlayers.length;
+      myPlayers.push({ name: `P${i+1}`, x: f.my[i]?.[0] ?? 50, y: f.my[i]?.[1] ?? 50 });
+    }
+    myPlayers = myPlayers.slice(0, format);
+  }
+
+  oppPlayers = f.opp.map(pos => ({ x: pos[0], y: pos[1] }));
+  ballPos    = { x: 50, y: 50 };
+  renderPitch();
+  renderBench();
+}
+
+// ─────────────────────────────────────────
+// RENDER PITCH
+// ─────────────────────────────────────────
+function renderPitch() {
+  playerEls.forEach(el => el.remove());
+  if (ballEl) ballEl.remove();
+  playerEls = [];
+
+  // My team
+  myPlayers.forEach((p, i) => {
+    const color = i === 0 ? myGkColor : myColor;
+    const el = createPlayerEl(humanSVG(color, initials(p.name)), p.x, p.y, false);
+    pitch.appendChild(el);
+    makeDraggable(el, pos => { p.x = pos.x; p.y = pos.y; });
+    playerEls.push(el);
+  });
+
+  // Opposition
+  oppPlayers.forEach((p, i) => {
+    const color = i === 0 ? oppGkColor : oppColor;
+    const label = i === 0 ? 'GK' : `${i+1}`;
+    const el = createPlayerEl(humanSVG(color, label), p.x, p.y, false);
+    pitch.appendChild(el);
+    makeDraggable(el, pos => { p.x = pos.x; p.y = pos.y; });
+    playerEls.push(el);
+  });
+
+  // Ball
+  ballEl = document.createElement('div');
+  ballEl.className = 'player ball-icon';
+  ballEl.innerHTML = ballSVG();
+  ballEl.style.left = `${ballPos.x}%`;
+  ballEl.style.top  = `${ballPos.y}%`;
+  pitch.appendChild(ballEl);
+  makeDraggable(ballEl, pos => { ballPos.x = pos.x; ballPos.y = pos.y; });
+  playerEls.push(ballEl);
+}
+
+function createPlayerEl(svgContent, xPct, yPct) {
+  const el = document.createElement('div');
+  el.className = 'player';
+  el.innerHTML = svgContent;
+  el.style.left = `${xPct}%`;
+  el.style.top  = `${yPct}%`;
+  return el;
+}
+
+// ─────────────────────────────────────────
+// RENDER BENCH
+// ─────────────────────────────────────────
+function renderBench() {
+  benchDiv.innerHTML = '';
+  if (benchPlayers.length === 0) {
+    benchDiv.innerHTML = '<span style="font-size:11px;color:#555;align-self:center">No subs added yet</span>';
+    return;
+  }
+  benchPlayers.forEach(p => {
+    const wrap = document.createElement('div');
+    wrap.className = 'bench-player';
+    wrap.innerHTML = humanSVG(myColor, initials(p.name), 22) +
+      `<span>${p.name}</span>`;
+    benchDiv.appendChild(wrap);
+  });
+}
+
+// ─────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────
+function initials(name) {
+  if (!name || !name.trim()) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 3).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+// ─────────────────────────────────────────
+// DRAG
+// ─────────────────────────────────────────
+function makeDraggable(el, onMove) {
+  let dragging = false, startX, startY, origLeft, origTop;
+
+  function coords(e) {
+    return e.touches
+      ? { x: e.touches[0].clientX, y: e.touches[0].clientY }
+      : { x: e.clientX,             y: e.clientY };
+  }
+
+  function onStart(e) {
+    e.preventDefault();
+    dragging = true;
+    const c  = coords(e);
+    startX   = c.x; startY = c.y;
+    origLeft = parseFloat(el.style.left);
+    origTop  = parseFloat(el.style.top);
+    el.style.zIndex = 200;
+  }
+
+  function onMoveEvt(e) {
+    if (!dragging) return;
+    e.preventDefault();
+    const c    = coords(e);
+    const rect = pitch.getBoundingClientRect();
+    const dx   = ((c.x - startX) / rect.width)  * 100;
+    const dy   = ((c.y - startY) / rect.height) * 100;
+    const nx   = Math.max(2, Math.min(98, origLeft + dx));
+    const ny   = Math.max(2, Math.min(98, origTop  + dy));
+    el.style.left = `${nx}%`;
+    el.style.top  = `${ny}%`;
+    onMove({ x: nx, y: ny });
+  }
+
+  function onEnd() {
+    dragging = false;
+    el.style.zIndex = 10;
+  }
+
+  el.addEventListener('touchstart', onStart,   { passive: false });
+  el.addEventListener('touchmove',  onMoveEvt, { passive: false });
+  el.addEventListener('touchend',   onEnd);
+  el.addEventListener('mousedown',  onStart);
+  window.addEventListener('mousemove', onMoveEvt);
+  window.addEventListener('mouseup',   onEnd);
+}
+
+// ─────────────────────────────────────────
+// MODAL
+// ─────────────────────────────────────────
+const modalOverlay  = document.getElementById('modal-overlay');
+const myPlayersList = document.getElementById('my-players-list');
+const benchListEl   = document.getElementById('bench-list');
+
+document.getElementById('setup-btn').addEventListener('click', openModal);
+document.getElementById('cancel-btn').addEventListener('click', () => modalOverlay.classList.remove('open'));
+document.getElementById('apply-btn').addEventListener('click', applySetup);
+
+function openModal() {
+  myPlayersList.innerHTML = '';
+  benchListEl.innerHTML   = '';
+  myPlayers.forEach((p, i)    => addRow(myPlayersList, p.name, `Player ${i+1}`));
+  benchPlayers.forEach((p, i) => addRow(benchListEl,   p.name, `Sub ${i+1}`));
+  modalOverlay.classList.add('open');
+}
+
+function addRow(container, value, placeholder) {
+  const row = document.createElement('div');
+  row.className = 'player-input-row';
+  row.innerHTML = `
+    <input type="text" placeholder="${placeholder}" value="${value || ''}" />
+    <button class="remove-btn">×</button>`;
+  row.querySelector('.remove-btn').addEventListener('click', () => row.remove());
+  container.appendChild(row);
+}
+
+document.getElementById('add-player-btn').addEventListener('click', () =>
+  addRow(myPlayersList, '', `Player ${myPlayersList.children.length + 1}`)
+);
+document.getElementById('add-bench-btn').addEventListener('click', () =>
+  addRow(benchListEl, '', `Sub ${benchListEl.children.length + 1}`)
+);
+
+function applySetup() {
+  const f = defaultFormations[format];
+  const names = Array.from(myPlayersList.querySelectorAll('input')).map(r => r.value.trim() || '?');
+  myPlayers = names.map((name, i) => ({
+    name,
+    x: myPlayers[i]?.x ?? f.my[i]?.[0] ?? 50,
+    y: myPlayers[i]?.y ?? f.my[i]?.[1] ?? 50
+  }));
+
+  const subNames = Array.from(benchListEl.querySelectorAll('input')).map(r => r.value.trim() || 'Sub');
+  benchPlayers = subNames.map(name => ({ name }));
+
+  const count = myPlayers.length;
+  while (oppPlayers.length < count) {
+    const i = oppPlayers.length;
+    oppPlayers.push({ x: f.opp[i]?.[0] ?? 50, y: f.opp[i]?.[1] ?? 50 });
+  }
+  oppPlayers = oppPlayers.slice(0, count);
+
+  modalOverlay.classList.remove('open');
+  renderPitch();
+  renderBench();
+}
+
+// ─────────────────────────────────────────
+// FORMAT & RESET
+// ─────────────────────────────────────────
+document.getElementById('format-select').addEventListener('change', () => {
+  myPlayers = []; benchPlayers = [];
+  init();
+});
+
+document.getElementById('reset-btn').addEventListener('click', () => {
+  const f = defaultFormations[format];
+  myPlayers.forEach((p, i)  => { if (f.my[i])  { p.x = f.my[i][0];  p.y = f.my[i][1];  } });
+  oppPlayers.forEach((p, i) => { if (f.opp[i]) { p.x = f.opp[i][0]; p.y = f.opp[i][1]; } });
+  ballPos = { x: 50, y: 50 };
+  renderPitch();
+});
+
+// ─────────────────────────────────────────
+// SERVICE WORKER
+// ─────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
+}
+
+// ─────────────────────────────────────────
+// BOOT
+// ─────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
