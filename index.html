@@ -400,7 +400,7 @@ function renderPitch(){
     el.appendChild(circle);
     el.appendChild(nameLabel);
     pitch.appendChild(el);
-    makeDraggable(el, np=>{ pitchPlayerPositions[p.id]={x:np.x,y:np.y}; });
+    makeDraggable(el, np=>{ pitchPlayerPositions[p.id]={x:np.x,y:np.y}; saveState(); });
   });
 
   // Ensure opp positions exist for format
@@ -428,7 +428,7 @@ function renderPitch(){
 
     el.appendChild(circle);
     pitch.appendChild(el);
-    makeDraggable(el, np=>{ oppPositions[i]={x:np.x,y:np.y}; });
+    makeDraggable(el, np=>{ oppPositions[i]={x:np.x,y:np.y}; saveState(); });
   });
 
   // Ball
@@ -438,7 +438,7 @@ function renderPitch(){
   ball.style.top  = ballPos.y+'%';
   ball.innerHTML = ballSVG(settings.ballColor, sz);
   pitch.appendChild(ball);
-  makeDraggable(ball, np=>{ ballPos.x=np.x; ballPos.y=np.y; });
+  makeDraggable(ball, np=>{ ballPos.x=np.x; ballPos.y=np.y; saveState(); });
 
   // Toggle opp visibility
   if(showMode==='mine') pitch.classList.add('opp-hidden');
@@ -628,17 +628,19 @@ document.getElementById('add-player-fab').addEventListener('click',()=>openModal
 // ─────────────────────────────────────────
 function initSettings(){
   function sw(id,key){
-    const sw = document.getElementById('sw-'+id);
+    const swEl = document.getElementById('sw-'+id);
     const cp = document.getElementById('cp-'+id);
-    sw.style.background = settings[key];
+    swEl.style.background = settings[key];
     cp.value = settings[key];
-    cp.addEventListener('input',e=>{ settings[key]=e.target.value; sw.style.background=e.target.value; renderPitch(); if(['myColor','myGkColor'].includes(key)) renderPlayersList(); });
+    cp.addEventListener('input',e=>{ settings[key]=e.target.value; swEl.style.background=e.target.value; saveState(); renderPitch(); if(['myColor','myGkColor'].includes(key)) renderPlayersList(); });
   }
   sw('my','myColor'); sw('mygk','myGkColor'); sw('opp','oppColor'); sw('oppgk','oppGkColor');
   sw('pitch','pitchColor'); sw('ball','ballColor');
 
-  document.getElementById('token-size-select').addEventListener('change',e=>{
-    settings.tokenSize = parseInt(e.target.value); renderPitch();
+  const tss = document.getElementById('token-size-select');
+  tss.value = String(settings.tokenSize);
+  tss.addEventListener('change',e=>{
+    settings.tokenSize = parseInt(e.target.value); saveState(); renderPitch();
   });
 }
 
@@ -690,8 +692,44 @@ document.querySelectorAll('.tt-btn').forEach(btn=>{
 });
 
 // ─────────────────────────────────────────
-// DEMO DATA
+// PERSIST — save/load via localStorage
 // ─────────────────────────────────────────
+function saveState(){
+  try {
+    localStorage.setItem('tactics_players', JSON.stringify(players));
+    localStorage.setItem('tactics_positions', JSON.stringify(pitchPlayerPositions));
+    localStorage.setItem('tactics_opp', JSON.stringify(oppPositions));
+    localStorage.setItem('tactics_ball', JSON.stringify(ballPos));
+    localStorage.setItem('tactics_format', String(format));
+    localStorage.setItem('tactics_settings', JSON.stringify(settings));
+  } catch(e){}
+}
+
+function loadState(){
+  try {
+    const p = localStorage.getItem('tactics_players');
+    if(p) players = JSON.parse(p);
+
+    const pos = localStorage.getItem('tactics_positions');
+    if(pos) pitchPlayerPositions = JSON.parse(pos);
+
+    const opp = localStorage.getItem('tactics_opp');
+    if(opp) oppPositions = JSON.parse(opp);
+
+    const ball = localStorage.getItem('tactics_ball');
+    if(ball) ballPos = JSON.parse(ball);
+
+    const fmt = localStorage.getItem('tactics_format');
+    if(fmt){ format = parseInt(fmt); document.getElementById('format-select').value = format; }
+
+    const sett = localStorage.getItem('tactics_settings');
+    if(sett) Object.assign(settings, JSON.parse(sett));
+  } catch(e){}
+
+  // If no saved players, load demo data
+  if(!players || players.length === 0) loadDemoPlayers();
+}
+
 function loadDemoPlayers(){
   const names=[
     {n:'James Hart',pos:'GK',num:1},
@@ -711,10 +749,16 @@ function loadDemoPlayers(){
   players = names.map(x=>({id:uid(),name:x.n,position:x.pos,number:x.num,available:true}));
 }
 
+// Patch render functions to auto-save after any change
+const _origRenderPitch = renderPitch;
+renderPitch = function(){ _origRenderPitch(); saveState(); };
+const _origRenderPlayersList = renderPlayersList;
+renderPlayersList = function(){ _origRenderPlayersList(); saveState(); };
+
 // ─────────────────────────────────────────
 // BOOT
 // ─────────────────────────────────────────
-loadDemoPlayers();
+loadState();
 initSettings();
 sizePitch();
 renderPitch();
