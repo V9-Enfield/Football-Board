@@ -518,8 +518,110 @@ function makeDraggable(el, onMove){
 }
 
 // ─────────────────────────────────────────
-// PLAYERS LIST
+// PLAYERS LIST + DRAG TO REORDER
 // ─────────────────────────────────────────
+let rowDragId = null;
+
+function attachRowDrag(handle, row, pid){
+  let startY, startIdx, isDragging = false;
+
+  function getRows(){ return Array.from(document.querySelectorAll('#players-list .player-row')); }
+
+  function getPlayerIndex(id){
+    // find in the full players array
+    return players.findIndex(p=>p.id===id);
+  }
+
+  function onStart(e){
+    e.preventDefault();
+    isDragging = false;
+    rowDragId = pid;
+    startY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    row.style.opacity = '0.5';
+    row.style.transform = 'scale(1.02)';
+    row.style.zIndex = '999';
+    row.style.position = 'relative';
+    row.style.transition = 'none';
+  }
+
+  function onMove(e){
+    if(rowDragId !== pid) return;
+    e.preventDefault();
+    isDragging = true;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+    // Find which row we're hovering over
+    const allRows = getRows();
+    const list = document.getElementById('players-list');
+    const listRect = list.getBoundingClientRect();
+
+    let targetRow = null;
+    allRows.forEach(r => {
+      if(r === row) return;
+      const rect = r.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      if(clientY >= rect.top && clientY <= rect.bottom){
+        targetRow = r;
+      }
+    });
+
+    // Highlight target
+    allRows.forEach(r => r.style.borderColor = '');
+    if(targetRow){
+      targetRow.style.borderColor = '#4ade80';
+    }
+  }
+
+  function onEnd(e){
+    if(rowDragId !== pid){ return; }
+    rowDragId = null;
+    row.style.opacity = '';
+    row.style.transform = '';
+    row.style.zIndex = '';
+    row.style.position = '';
+
+    if(!isDragging){ return; }
+    isDragging = false;
+
+    const clientY = e.touches ? e.changedTouches[0].clientY : e.clientY;
+    const allRows = getRows();
+
+    let targetId = null;
+    let insertBefore = false;
+    allRows.forEach(r => {
+      if(r === row) return;
+      r.style.borderColor = '';
+      const rect = r.getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      if(clientY >= rect.top && clientY <= rect.bottom){
+        targetId = r.dataset.id;
+        insertBefore = clientY < mid;
+      }
+    });
+
+    if(targetId && targetId !== pid){
+      const fromIdx = players.findIndex(p=>p.id===pid);
+      const toIdx   = players.findIndex(p=>p.id===targetId);
+      if(fromIdx !== -1 && toIdx !== -1){
+        const [moved] = players.splice(fromIdx, 1);
+        const newTo = players.findIndex(p=>p.id===targetId);
+        const insertAt = insertBefore ? newTo : newTo+1;
+        players.splice(insertAt, 0, moved);
+        renderPlayersList();
+        renderPitch();
+      }
+    }
+  }
+
+  handle.addEventListener('touchstart', onStart, {passive:false});
+  handle.addEventListener('mousedown', onStart);
+  window.addEventListener('touchmove', onMove, {passive:false});
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('touchend', onEnd);
+  window.addEventListener('mouseup', onEnd);
+}
+
 function renderPlayersList(){
   const list = document.getElementById('players-list');
   list.innerHTML = '';
@@ -529,34 +631,41 @@ function renderPlayersList(){
   const ordered = [...avail,...unavail];
 
   if(ordered.length===0){
-    list.innerHTML = '<div style="text-align:center;color:#556;padding:40px 16px;font-size:13px;">No players yet.<br>Tap "+ Add Player" to get started.</div>';
+    list.innerHTML = '<div style="text-align:center;color:#556;padding:40px 16px;font-size:13px;">No players yet.<br>Tap \"+ Add Player\" to get started.</div>';
     return;
   }
 
-  ordered.forEach((p,idx)=>{
+  ordered.forEach((p)=>{
     const isOnPitch = avail.indexOf(p) < format && p.available;
     const row = document.createElement('div');
     row.className = 'player-row'+(p.available?'':' unavailable');
+    row.dataset.id = p.id;
 
-    const avBg = p.available ? '#4ade80' : 'none';
     const avTick = p.available ? '<span style="color:#000;font-size:11px;font-weight:700;">✓</span>' : '';
     const badge = isOnPitch
-      ? `<span class="player-badge">STARTING</span>`
-      : (p.available ? `<span class="player-badge" style="background:#1e2a3f;color:#778;">BENCH</span>` : '');
+      ? '<span class="player-badge">STARTING</span>'
+      : (p.available ? '<span class="player-badge" style="background:#1e2a3f;color:#778;">BENCH</span>' : '');
 
-    row.innerHTML = `
-      <div class="player-avail ${p.available?'checked':''}" data-id="${p.id}" title="Toggle availability">${avTick}</div>
-      <div class="player-avatar" style="background:${p.position==='GK'?settings.myGkColor:settings.myColor}">${initials(p.name)}</div>
-      <div class="player-info">
-        <div class="player-name">${p.name||'Unnamed'} ${badge}</div>
-        <div class="player-meta">${p.position||'?'}${p.number?' · #'+p.number:''}</div>
-      </div>
-      <div style="display:flex;gap:5px;">
-        <button class="edit-btn" data-id="${p.id}">Edit</button>
-      </div>`;
+    row.innerHTML =
+      '<div class="drag-handle" title="Hold and drag to reorder" style="cursor:grab;padding:4px 6px 4px 0;flex-shrink:0;">' +
+        '<svg width="16" height="16" viewBox="0 0 16 16"><circle cx="5" cy="4" r="1.5" fill="#556"/><circle cx="11" cy="4" r="1.5" fill="#556"/><circle cx="5" cy="8" r="1.5" fill="#556"/><circle cx="11" cy="8" r="1.5" fill="#556"/><circle cx="5" cy="12" r="1.5" fill="#556"/><circle cx="11" cy="12" r="1.5" fill="#556"/></svg>' +
+      '</div>' +
+      '<div class="player-avail ' + (p.available?'checked':'') + '" data-id="' + p.id + '" title="Toggle availability">' + avTick + '</div>' +
+      '<div class="player-avatar" style="background:' + (p.position==='GK'?settings.myGkColor:settings.myColor) + '">' + initials(p.name) + '</div>' +
+      '<div class="player-info">' +
+        '<div class="player-name">' + (p.name||'Unnamed') + ' ' + badge + '</div>' +
+        '<div class="player-meta">' + (p.position||'?') + (p.number?' · #'+p.number:'') + '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:5px;">' +
+        '<button class="edit-btn" data-id="' + p.id + '">Edit</button>' +
+      '</div>';
 
     row.querySelector('.player-avail').addEventListener('click',()=>toggleAvail(p.id));
     row.querySelector('.edit-btn').addEventListener('click',()=>openModal(p.id));
+
+    const handle = row.querySelector('.drag-handle');
+    attachRowDrag(handle, row, p.id);
+
     list.appendChild(row);
   });
 }
